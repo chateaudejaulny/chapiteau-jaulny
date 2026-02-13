@@ -1,0 +1,548 @@
+
+<!DOCTYPE html>
+
+<html lang="fr">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Implantation Chapiteau v51</title>
+<style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      overflow: auto;
+      background: #f0f0f0;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    #chapiteau {
+      user-select: none;
+      width: 1500px;
+      height: 1000px;
+      margin: 40px auto;
+      position: relative;
+      background: #fff;
+      border: 3px solid #333;
+    }
+
+    .table {
+  width: 258px;
+  height: 258px;
+  position: absolute;
+  cursor: move;
+  background: transparent;
+}
+
+    .space {
+      width: 200px;  /* 2m */
+      height: 150px; /* 1.5m */
+      background: rgba(0, 200, 0, 0.2);
+      border: 2px dashed #090;
+      position: absolute;
+      cursor: move;
+    }
+
+    .entry {
+      position: absolute;
+      background: #333;
+      color: #fff;
+      font-size: 14px;
+      padding: 2px 4px;
+      text-align: center;
+    }
+
+    #toolbar {
+      text-align: center;
+      padding: 10px;
+      background: #ddd;
+    }
+
+    button {
+      margin: 0 5px;
+      padding: 5px 10px;
+    }
+  
+.chair {
+  width: 24px;
+  height: 30px;
+  background: #5a4a3f;
+  position: absolute;
+  border-radius: 6px 6px 2px 2px;
+  z-index:2;
+  transform-origin: center center;
+}
+
+.table-label{
+  font-size:18px !important;
+  font-family:'Playfair Display', serif !important;
+  background:rgba(255,255,255,0.9) !important;
+  padding:6px 14px !important;
+  border-radius:20px !important;
+  border:1px solid #c9b37e !important;
+  box-shadow:0 2px 6px rgba(0,0,0,0.15) !important;
+  color:#3b2f2f !important;
+  font-weight:normal !important;
+  position:absolute;
+  z-index:3;
+}
+
+
+    html, body {
+      height: 100%;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+    }
+
+    #viewport{
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: auto;
+      padding: 12px;
+    }
+
+    #chapiteauWrapper{
+      box-sizing: border-box;
+      position: relative;
+      /* width/height set by JS to the scaled size */
+    }
+
+    #chapiteau{
+      margin: 0; /* handled by wrapper */
+      transform-origin: top left;
+    }
+
+
+.table-top {
+  position:absolute;
+  width:178px;
+  height:178px;
+  background:#f8f5f0;
+  border:2px solid #c9b37e;
+  border-radius:50%;
+  top:50%;
+  left:50%;
+  transform:translate(-50%, -50%);
+  box-shadow:0 4px 12px rgba(0,0,0,0.15);
+  z-index:1;
+}
+
+
+body, #toolbar, #toolbar button, #toolbar select, #toolbar input {
+  font-family: 'Playfair Display', serif;
+}
+
+
+#toolbar button{
+  background: linear-gradient(145deg,#ffffff,#f3eee4);
+  border:1px solid #c9b37e;
+  border-radius:25px;
+  padding:8px 16px;
+  font-size:14px;
+  transition:all 0.2s ease;
+}
+
+#toolbar button:hover{
+  background:linear-gradient(145deg,#f8f5f0,#e8dcc6);
+  box-shadow:0 3px 8px rgba(0,0,0,0.12);
+  transform:translateY(-1px);
+}
+
+#toolbar button:active{
+  transform:translateY(0px);
+  box-shadow:0 1px 3px rgba(0,0,0,0.15);
+}
+
+</style>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500&display=swap" rel="stylesheet">
+</head>
+<body>
+<div id="toolbar">
+<select id="projectSelect" onchange="loadProjectFromSelect()">
+<option value="">-- Charger un projet --</option>
+</select>
+<button onclick="saveProject()">💾 Sauvegarder</button>
+<div id="zoomControl" style="display:inline-flex;align-items:center;gap:8px;margin-left:10px;">
+  <span style="font-size:14px;">🔎 Zoom</span>
+  <input type="range" id="zoomSlider" min="50" max="150" value="100" />
+  <span id="zoomValue" style="font-size:14px;min-width:52px;display:inline-block;">100%</span>
+</div>
+<button onclick="addTable()">Ajouter une table</button>
+<button onclick="addSpace()">Ajouter un espace</button>
+<button id="newProjectBtn" onclick="createNewProject()">Nouveau dossier</button></div>
+<div id="viewport"><div id="chapiteauWrapper"><div id="chapiteau">
+<!-- Entrée principale (centrée en bas) -->
+<!-- Entrée secondaire (verticale, bas gauche) -->
+<!-- Entrée traiteur (centrée à droite) -->
+<div class="entry" style="width: 520px; height: 34px; left: 490px; top: 1000px; font-size: 20px; font-weight:600; display:flex; align-items:center; justify-content:center; transform: translateY(6px);">Entrée principale</div><div class="entry" style="width: 28px; height: 500px; left: -34px; top: 500px; writing-mode: vertical-rl; font-size: 20px; font-weight:600; display:flex; align-items:center; justify-content:center;">Entrée secondaire</div><div class="entry" style="width: 28px; height: 500px; left: 1514px; top: 250px; writing-mode: vertical-rl; font-size: 20px; font-weight:600; display:flex; align-items:center; justify-content:center;">Entrée traiteur</div></div>
+<script>
+  const chapiteau = document.getElementById("chapiteau");
+
+  const BASE_WIDTH = 1500;
+  const BASE_HEIGHT = 1000;
+  let currentScale = 1;
+  let baseScale = 1;
+  let userZoom = 1;
+
+const APP_VERSION = "reset_v1";
+
+function resetProjectsIfNeeded(){
+  const flag = localStorage.getItem("__chapiteau_reset__");
+  if(flag === APP_VERSION) return;
+
+  const keys = [];
+  for(let i=0;i<localStorage.length;i++){
+    const k = localStorage.key(i);
+    if(k && !k.startsWith("__chapiteau_")){
+      keys.push(k);
+    }
+  }
+  keys.forEach(k => localStorage.removeItem(k));
+  localStorage.setItem("__chapiteau_reset__", APP_VERSION);
+}
+
+
+  function updateScale() {
+    const toolbar = document.getElementById("toolbar");
+    const wrapper = document.getElementById("chapiteauWrapper");
+
+    const EXTRA_LEFT = 40;
+    const EXTRA_RIGHT = 50;
+    const EXTRA_BOTTOM = 50;
+    const EXTRA_TOP = 0;
+
+    const totalBaseWidth = BASE_WIDTH + EXTRA_LEFT + EXTRA_RIGHT;
+    const totalBaseHeight = BASE_HEIGHT + EXTRA_TOP + EXTRA_BOTTOM;
+
+    const availableWidth = window.innerWidth - 24;
+    const availableHeight = window.innerHeight - (toolbar ? toolbar.offsetHeight : 0) - 24;
+
+    const scaleX = availableWidth / totalBaseWidth;
+    const scaleY = availableHeight / totalBaseHeight;
+
+    // Restore zoom logic
+    baseScale = Math.min(scaleX, scaleY);
+    currentScale = baseScale * userZoom;
+    currentScale = Math.max(currentScale, 0.2);
+
+    chapiteau.style.transform = `scale(${currentScale})`;
+
+    wrapper.style.width = (totalBaseWidth * currentScale) + "px";
+    wrapper.style.height = (totalBaseHeight * currentScale) + "px";
+
+    wrapper.style.paddingLeft = (EXTRA_LEFT * currentScale) + "px";
+    wrapper.style.paddingRight = (EXTRA_RIGHT * currentScale) + "px";
+    wrapper.style.paddingBottom = (EXTRA_BOTTOM * currentScale) + "px";
+    wrapper.style.paddingTop = (EXTRA_TOP * currentScale) + "px";
+  }
+
+  window.addEventListener("resize", updateScale);
+  
+  function initZoom(){
+    const slider = document.getElementById("zoomSlider");
+    const value = document.getElementById("zoomValue");
+    if(!slider || !value) return;
+
+    // Initialize from current userZoom
+    slider.value = String(Math.round(userZoom * 100));
+    value.textContent = slider.value + "%";
+
+    slider.addEventListener("input", () => {
+      userZoom = Number(slider.value) / 100;
+      value.textContent = slider.value + "%";
+      updateScale();
+    });
+  }
+
+
+
+  
+function addTable() {
+  const existingTables = document.querySelectorAll(".table").length;
+  const defaultName = "Table " + (existingTables + 1);
+  const tableName = prompt("Nom de la table :", defaultName);
+  if (!tableName) return;
+
+  const table = document.createElement("div");
+  table.className = "table";
+  table.style.width = "258px";
+  table.style.height = "258px";
+  table.style.left = (100 + tableCreationOffset) + "px";
+  table.style.top = (100 + tableCreationOffset) + "px";
+  tableCreationOffset += 20;
+  table.dataset.name = tableName;
+
+  const tableTop = document.createElement("div");
+  tableTop.className = "table-top";
+  table.appendChild(tableTop);
+
+  const label = document.createElement("div");
+  label.className = "table-label";
+  label.textContent = tableName;
+  label.style.position = "absolute";
+  label.style.top = "50%";
+  label.style.left = "50%";
+  label.style.transform = "translate(-50%, -50%)";
+  
+  label.style.fontSize = "18px";
+  label.style.fontFamily = "'Playfair Display', serif";
+  label.style.background = "rgba(255,255,255,0.9)";
+  label.style.padding = "6px 14px";
+  label.style.borderRadius = "20px";
+  label.style.border = "1px solid #c9b37e";
+  label.style.boxShadow = "0 2px 6px rgba(0,0,0,0.15)";
+  label.style.color = "#3b2f2f";
+
+  label.style.pointerEvents = "none";
+  table.appendChild(label);
+  enableTableRename(table, label);
+
+  const radius = 129.0;
+  const chairRadius = 129.0;
+
+  for (let i = 0; i < 10; i++) {
+    const angle = (i * 36) * Math.PI / 180;
+    const x = radius + chairRadius * Math.cos(angle);
+    const y = radius + chairRadius * Math.sin(angle);
+    const chair = document.createElement("div");
+    chair.className = "chair";
+    chair.style.left = x + "px";
+    chair.style.top = y + "px";
+    chair.style.transform = "translate(-50%, -50%) rotate(" + (angle * 180/Math.PI + 90) + "deg)";
+    table.appendChild(chair);
+  }
+
+  makeDraggable(table);
+  chapiteau.appendChild(table);
+}
+
+
+  
+function addSpace() {
+  const width = parseInt(prompt("Largeur de l'espace (en mètres) :", "2"), 10);
+  const height = parseInt(prompt("Hauteur de l'espace (en mètres) :", "1.5"), 10);
+  const label = prompt("Nom de l'espace :", "Espace");
+
+  if (isNaN(width) || isNaN(height)) return;
+
+  const space = document.createElement("div");
+  space.className = "space";
+  space.dataset.label = label;
+  space.style.width = (width * 100) + "px";
+  space.style.height = (height * 100) + "px";
+  space.style.left = (400 + spaceCreationOffset) + "px";
+  space.style.top = (400 + spaceCreationOffset) + "px";
+  spaceCreationOffset += 20;
+
+  const text = document.createElement("div");
+  text.className = "table-label";
+  text.textContent = label;
+  text.style.position = "absolute";
+  text.style.top = "-28px";
+  text.style.left = "50%";
+  text.style.whiteSpace = "nowrap";
+  text.style.transform = "translate(-50%, 0)";
+  text.style.fontSize = "14px";
+  text.style.pointerEvents = "none";
+  text.style.color = "#000";
+
+  space.appendChild(text);
+  makeDraggable(space);
+  chapiteau.appendChild(space);
+}
+
+
+  function makeDraggable(el) {
+    let offsetX = 0, offsetY = 0, isDown = false;
+
+    el.addEventListener('mousedown', (e) => {
+      isDown = true;
+
+      // Convert mouse coords to chapiteau coordinate system (unscaled)
+      const rect = chapiteau.getBoundingClientRect();
+      const mouseX = (e.clientX - rect.left) / currentScale;
+      const mouseY = (e.clientY - rect.top) / currentScale;
+
+      offsetX = mouseX - el.offsetLeft;
+      offsetY = mouseY - el.offsetTop;
+    });
+
+    document.addEventListener('mouseup', () => isDown = false);
+
+    document.addEventListener('mousemove', (e) => {
+      if (!isDown) return;
+
+      const rect = chapiteau.getBoundingClientRect();
+      const mouseX = (e.clientX - rect.left) / currentScale;
+      const mouseY = (e.clientY - rect.top) / currentScale;
+
+      el.style.left = (mouseX - offsetX) + 'px';
+      el.style.top = (mouseY - offsetY) + 'px';
+    });
+  }
+
+let currentProjectName = null;
+let tableCreationOffset = 0;
+let spaceCreationOffset = 0;
+
+function enableTableRename(table, label){
+  table.addEventListener("dblclick", function(e){
+    e.stopPropagation();
+    const newName = prompt("Nouveau nom de la table :", table.dataset.name || "");
+    if(newName){
+      table.dataset.name = newName;
+      label.textContent = newName;
+    }
+  });
+}
+
+
+function saveProject() {
+  if (!currentProjectName) {
+    const name = prompt("Nom du projet à sauvegarder :");
+    if (!name) return;
+    currentProjectName = name;
+  tableCreationOffset = 0;
+    addProjectToSelect(name);
+  }
+
+  const elements = Array.from(chapiteau.children)
+    .filter(el => el.classList.contains("table") || el.classList.contains("space"))
+    .map(el => ({
+      class: el.className,
+      left: el.style.left,
+      top: el.style.top,
+      name: el.dataset.name || null,
+      width: el.classList.contains("space") ? el.style.width : null,
+      height: el.classList.contains("space") ? el.style.height : null,
+      label: el.classList.contains("space") ? (el.dataset.label || null) : null
+    }));
+
+  localStorage.setItem(currentProjectName, JSON.stringify(elements));
+  updateProjectSelect();
+}
+
+function loadProjectFromSelect() {
+  const name = document.getElementById("projectSelect").value;
+  if (!name) return;
+  currentProjectName = name;
+  tableCreationOffset = 0;
+
+  // Supprimer les anciens éléments
+  Array.from(chapiteau.children).forEach(el => {
+    if (el.classList.contains("table") || el.classList.contains("space")) el.remove();
+  });
+
+  const data = JSON.parse(localStorage.getItem(name));
+  data.forEach(obj => {
+    const el = document.createElement("div");
+    el.className = obj.class;
+    el.style.left = obj.left;
+    el.style.top = obj.top;
+
+    if (obj.class === "table") {
+      el.style.width = "258px";
+      el.style.height = "258px";
+      el.dataset.name = obj.name;
+
+      const tableTop = document.createElement("div");
+      tableTop.className = "table-top";
+      el.appendChild(tableTop);
+
+      const label = document.createElement("div");
+  label.className = "table-label";
+      label.textContent = obj.name;
+      label.style.position = "absolute";
+      label.style.top = "50%";
+      label.style.left = "50%";
+      label.style.transform = "translate(-50%, -50%)";
+      label.style.fontSize = "14px";
+      label.style.fontWeight = "bold";
+      label.style.pointerEvents = "none";
+      el.appendChild(label);
+      enableTableRename(el, label);
+
+      const radius = 129.0;
+      const chairRadius = 129.0;
+
+      for (let i = 0; i < 10; i++) {
+        const angle = (i * 36) * Math.PI / 180;
+        const x = radius + chairRadius * Math.cos(angle);
+        const y = radius + chairRadius * Math.sin(angle);
+        const chair = document.createElement("div");
+        chair.className = "chair";
+        chair.style.left = x + "px";
+        chair.style.top = y + "px";
+        chair.style.transform = "translate(-50%, -50%) rotate(" + (angle * 180/Math.PI + 90) + "deg)";
+        el.appendChild(chair);
+      }
+    }
+
+    if (obj.class === "space") {
+      if (obj.width) el.style.width = obj.width;
+      if (obj.height) el.style.height = obj.height;
+      el.dataset.label = obj.label || "Espace";
+
+      const text = document.createElement("div");
+      text.className = "table-label";  // same style as tables
+      text.textContent = el.dataset.label;
+      text.style.position = "absolute";
+      text.style.top = "-28px";
+      text.style.left = "50%";
+  text.style.whiteSpace = "nowrap";
+      text.style.transform = "translate(-50%, 0)";
+      text.style.pointerEvents = "none";
+      el.appendChild(text);
+    }
+
+    makeDraggable(el);
+    chapiteau.appendChild(el);
+  });
+}
+
+function updateProjectSelect() {
+  const select = document.getElementById("projectSelect");
+  const keys = Object.keys(localStorage);
+  select.innerHTML = '<option value="">-- Charger un projet --</option>';
+  keys.forEach(k => {
+    const option = document.createElement("option");
+    option.value = k;
+    option.textContent = k;
+    if (k === currentProjectName) option.selected = true;
+    select.appendChild(option);
+  });
+}
+
+function addProjectToSelect(name) {
+  const select = document.getElementById("projectSelect");
+  const option = document.createElement("option");
+  option.value = name;
+  option.textContent = name;
+  option.selected = true;
+  select.appendChild(option);
+}
+
+window.onload = () => { resetProjectsIfNeeded(); updateProjectSelect(); initZoom(); updateScale(); };
+
+
+
+function createNewProject() {
+  tableCreationOffset = 0;
+  spaceCreationOffset = 0;
+  if (confirm("Créer un nouveau projet ? Cela effacera le contenu actuel.")) {
+    document.getElementById("chapiteau").innerHTML = '';
+    currentProjectName = "";
+    document.getElementById("projectSelect").value = "";
+    location.reload();
+  }
+}
+</script>
+</body>
+</html>
