@@ -300,6 +300,129 @@ body, #toolbar, #toolbar button, #toolbar select, #toolbar input {
 
 
 
+
+/* --- v134 clean resize architecture --- */
+
+.space-selected{
+  outline:2px solid rgba(201,179,126,0.95);
+  outline-offset:2px;
+  box-shadow:0 4px 14px rgba(0,0,0,0.15);
+}
+
+.resize-handle{
+  position:absolute;
+  width:10px;
+  height:10px;
+  background:#fff;
+  border:1px solid rgba(201,179,126,0.95);
+  box-shadow:0 2px 6px rgba(0,0,0,0.2);
+  z-index:10;
+}
+
+.h-nw{left:-6px;top:-6px;cursor:nwse-resize;}
+.h-ne{right:-6px;top:-6px;cursor:nesw-resize;}
+.h-se{right:-6px;bottom:-6px;cursor:nwse-resize;}
+.h-sw{left:-6px;bottom:-6px;cursor:nesw-resize;}
+
+/* Side handles */
+.h-n{left:50%;top:-6px;transform:translateX(-50%);cursor:ns-resize;}
+.h-s{left:50%;bottom:-6px;transform:translateX(-50%);cursor:ns-resize;}
+.h-e{right:-6px;top:50%;transform:translateY(-50%);cursor:ew-resize;}
+.h-w{left:-6px;top:50%;transform:translateY(-50%);cursor:ew-resize;}
+
+/* Rotation handle */
+.rotate-handle{
+  position:absolute;
+  width:14px;
+  height:14px;
+  border-radius:50%;
+  background:#fff;
+  border:2px solid rgba(201,179,126,0.95);
+  box-shadow:0 2px 6px rgba(0,0,0,0.25);
+  cursor:grab;
+  left:50%;
+  top:-32px;
+  transform:translateX(-50%);
+  z-index:12;
+}
+
+
+
+
+/* --- v140: Center ONLY space labels safely --- */
+.space-label{
+  position:absolute;
+  left:50%;
+  top:50%;
+  transform:translate(-50%, -50%);
+  pointer-events:none;
+}
+
+
+/* --- v141: Move space label to bottom safely --- */
+/* Target elements inside chapiteau that are NOT tables */
+#chapiteau > div:not(.table) .table-label,
+#chapiteau > div:not(.table) .space-label{
+  top:auto !important;
+  bottom:6px !important;
+  left:50% !important;
+  transform:translateX(-50%) !important;
+}
+
+
+/* --- v145: Table selection styling --- */
+.table.table-selected{
+  outline: 2px solid rgba(201,179,126,0.95);
+  outline-offset: 2px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.15);
+}
+
+
+/* --- v146: Internal delete icon (stable) --- */
+.delete-btn{
+  position:absolute;
+  top:6px;
+  right:6px;
+  width:26px;
+  height:26px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+  z-index:25;
+  opacity:0.9;
+  transition:all 0.2s ease;
+}
+
+.delete-btn svg{
+  width:22px;
+  height:22px;
+  stroke:#4a3a2a;
+  stroke-width:1.8;
+  fill:none;
+}
+
+.delete-btn:hover svg{
+  stroke:#a94442;
+}
+
+
+/* --- v154: Undo button --- */
+.undo-btn{
+  cursor:pointer;
+  padding:6px 10px;
+  margin-right:10px;
+  border-radius:14px;
+  border:1px solid #c9b37e;
+  background:linear-gradient(145deg,#ffffff,#f3eee4);
+  font-family:'Playfair Display', serif;
+  font-size:16px;
+  line-height:1;
+}
+.undo-btn:hover{
+  background:linear-gradient(145deg,#ffffff,#efe6d6);
+}
+
 </style>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500&display=swap" rel="stylesheet">
 </head>
@@ -317,7 +440,7 @@ body, #toolbar, #toolbar button, #toolbar select, #toolbar input {
 </div>
 <button onclick="addTable()">Ajouter une table</button>
 <button onclick="addSpace()">Ajouter un espace</button>
-<button id="newProjectBtn" onclick="createNewProject()">Nouveau dossier</button>
+<button class="undo-btn" onclick="undoAction()" title="Annuler (Undo)">↩</button>
 <button onclick="printPDF()" style="margin-left:auto;border:1px solid #c9b37e;background:linear-gradient(145deg,#ffffff,#f3eee4);border-radius:14px;padding:6px 10px;cursor:pointer;font-size:13px;">🖨️ PDF / Impr</button>
 </div>
 
@@ -580,7 +703,8 @@ function saveProject() {
       name: el.dataset.name || null,
       width: el.classList.contains("space") ? el.style.width : null,
       height: el.classList.contains("space") ? el.style.height : null,
-      label: el.classList.contains("space") ? (el.dataset.label || null) : null
+      label: el.classList.contains("space") ? (el.dataset.label || null) : null,
+        rotation: el.classList.contains("space") ? (el.dataset.rotation || null) : null
     }));
 
   localStorage.setItem(currentProjectName, JSON.stringify(elements));
@@ -647,6 +771,10 @@ function loadProjectFromSelect() {
       if (obj.width) el.style.width = obj.width;
       if (obj.height) el.style.height = obj.height;
       el.dataset.label = obj.label || "Espace";
+        if(obj.rotation){
+          el.dataset.rotation = obj.rotation;
+          el.style.transform = "rotate(" + obj.rotation + "deg)";
+        }
 
       const text = document.createElement("div");
       text.className = "table-label";  // same style as tables
@@ -759,6 +887,369 @@ if(typeof loadProjectFromSelect === "function"){
     updateProjectDisplay();
   };
 }
+
+
+/* --- v134 clean resize system --- */
+
+let selectedSpace = null;
+let isResizing = false;
+let resizeDir = null;
+let startX, startY, startW, startH, startLeft, startTop;
+
+function selectSpace(el){
+  clearSelection();
+  selectedSpace = el;
+  el.classList.add("space-selected");
+  addHandles(el);
+}
+
+function clearSelection(){
+  if(!selectedSpace) return;
+  selectedSpace.classList.remove("space-selected");
+  selectedSpace.querySelectorAll(".resize-handle").forEach(h=>h.remove());
+  selectedSpace = null;
+}
+
+function addHandles(el){
+  ["nw","ne","se","sw"].forEach(dir=>{
+    const h=document.createElement("div");
+    h.className="resize-handle h-"+dir;
+    h.addEventListener("mousedown",(e)=>startResize(e,dir));
+    el.appendChild(h);
+  });
+}
+
+function startResize(e,dir){
+  e.stopPropagation();
+  e.preventDefault();
+
+  isResizing = true;
+  resizeDir = dir;
+
+  const scale = getScale();
+
+  startX = e.clientX;
+  startY = e.clientY;
+
+  startW = selectedSpace.offsetWidth;
+  startH = selectedSpace.offsetHeight;
+  startLeft = selectedSpace.offsetLeft;
+  startTop = selectedSpace.offsetTop;
+
+  document.addEventListener("mousemove",resizeMove);
+  document.addEventListener("mouseup",stopResize);
+}
+
+function resizeMove(e){
+  if(!isResizing) return;
+
+  const scale = getScale();
+
+  const dx = (e.clientX - startX)/scale;
+  const dy = (e.clientY - startY)/scale;
+
+  let newW = startW;
+  let newH = startH;
+  let newLeft = startLeft;
+  let newTop = startTop;
+
+  if(resizeDir.includes("e")) newW = startW + dx;
+  if(resizeDir.includes("s")) newH = startH + dy;
+  if(resizeDir.includes("w")){
+    newW = startW - dx;
+    newLeft = startLeft + dx;
+  }
+  if(resizeDir.includes("n")){
+    newH = startH - dy;
+    newTop = startTop + dy;
+  }
+
+  newW = Math.max(20,newW);
+  newH = Math.max(20,newH);
+
+  selectedSpace.style.width = newW + "px";
+  selectedSpace.style.height = newH + "px";
+  selectedSpace.style.left = newLeft + "px";
+  selectedSpace.style.top = newTop + "px";
+}
+
+function stopResize(){
+  isResizing=false;
+  document.removeEventListener("mousemove",resizeMove);
+  document.removeEventListener("mouseup",stopResize);
+}
+
+function getScale(){
+  const chap = document.getElementById("chapiteau");
+  const style = window.getComputedStyle(chap);
+  const transform = style.transform;
+  if(transform && transform!=="none"){
+    const values = transform.match(/matrix\(([^)]+)\)/);
+    if(values){
+      return parseFloat(values[1].split(",")[0]);
+    }
+  }
+  return 1;
+}
+
+// Sélection click simple
+document.addEventListener("mousedown",function(e){
+  const el = e.target;
+  if(el.parentElement && el.parentElement.id==="chapiteau"){
+    selectSpace(el);
+  } else {
+    clearSelection();
+  }
+});
+
+
+/* --- v135: add side resize handles --- */
+
+// Patch addHandles to include sides
+const oldAddHandles_v134 = addHandles;
+addHandles = function(el){
+  oldAddHandles_v134(el);
+  ["n","s","e","w"].forEach(dir=>{
+    const h=document.createElement("div");
+    h.className="resize-handle h-"+dir;
+    h.addEventListener("mousedown",(e)=>startResize(e,dir));
+    el.appendChild(h);
+  });
+};
+
+
+/* --- v136: Rotation with 15° snap --- */
+
+let isRotating = false;
+let rotationStartAngle = 0;
+let elementStartAngle = 0;
+
+function startRotate(e){
+  e.stopPropagation();
+  e.preventDefault();
+
+  if(!selectedSpace) return;
+
+  isRotating = true;
+
+  const rect = selectedSpace.getBoundingClientRect();
+  const centerX = rect.left + rect.width/2;
+  const centerY = rect.top + rect.height/2;
+
+  rotationStartAngle = Math.atan2(e.clientY - centerY, e.clientX - centerX);
+  elementStartAngle = parseFloat(selectedSpace.dataset.rotation || 0);
+
+  document.addEventListener("mousemove", rotateMove);
+  document.addEventListener("mouseup", stopRotate);
+}
+
+function rotateMove(e){
+  if(!isRotating || !selectedSpace) return;
+
+  const rect = selectedSpace.getBoundingClientRect();
+  const centerX = rect.left + rect.width/2;
+  const centerY = rect.top + rect.height/2;
+
+  const currentAngle = Math.atan2(e.clientY - centerY, e.clientX - centerX);
+  let delta = (currentAngle - rotationStartAngle) * (180/Math.PI);
+
+  let newAngle = elementStartAngle + delta;
+
+  // Snap to 15°
+  newAngle = Math.round(newAngle / 15) * 15;
+
+  selectedSpace.style.transform = "rotate(" + newAngle + "deg)";
+  selectedSpace.dataset.rotation = newAngle;
+}
+
+function stopRotate(){
+  isRotating = false;
+  document.removeEventListener("mousemove", rotateMove);
+  document.removeEventListener("mouseup", stopRotate);
+}
+
+// Patch addHandles to include rotation handle
+const oldAddHandles_v135 = addHandles;
+addHandles = function(el){
+  oldAddHandles_v135(el);
+
+  const rot = document.createElement("div");
+  rot.className = "rotate-handle";
+  rot.addEventListener("mousedown", startRotate);
+  el.appendChild(rot);
+};
+
+
+
+
+/* --- v145: Table selection + delete/backspace support --- */
+let selectedTable = null;
+
+function clearTableSelection(){
+  if(!selectedTable) return;
+  selectedTable.classList.remove("table-selected");
+  selectedTable = null;
+}
+
+function selectTable(el){
+  if(selectedTable === el) return;
+  clearTableSelection();
+  selectedTable = el;
+  selectedTable.classList.add("table-selected");
+}
+
+// Capture mousedown on tables to select them (without breaking drag)
+document.addEventListener("mousedown", (e) => {
+  const t = e.target.closest ? e.target.closest(".table") : null;
+  if(t){
+    selectTable(t);
+  } else if(!(e.target.closest && e.target.closest(".space"))){
+    // click outside both tables and spaces clears table selection
+    clearTableSelection();
+  }
+}, true);
+
+// Enhance delete key handling: Delete + Backspace
+document.addEventListener("keydown", function(e){
+  const isDelete = (e.key === "Delete" || e.key === "Del" || e.keyCode === 46);
+  const isBackspace = (e.key === "Backspace" || e.keyCode === 8);
+  if(!(isDelete || isBackspace)) return;
+
+  // Avoid deleting while typing in an input/select
+  const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : "";
+  if(tag === "input" || tag === "textarea" || tag === "select") return;
+
+  if(typeof selectedSpace !== "undefined" && selectedSpace){
+    selectedSpace.remove();
+    selectedSpace = null;
+    e.preventDefault();
+    return;
+  }
+  if(selectedTable){
+    selectedTable.remove();
+    selectedTable = null;
+    e.preventDefault();
+    return;
+  }
+});
+
+
+/* --- v146: Stable delete icon logic --- */
+
+function addDeleteButton(el){
+  removeDeleteButtons();
+  
+  const btn = document.createElement("div");
+  btn.className = "delete-btn";
+  btn.innerHTML = `
+    <svg viewBox="0 0 24 24">
+      <path d="M3 6h18"/>
+      <path d="M8 6V4h8v2"/>
+      <path d="M6 6l1 14h10l1-14"/>
+      <path d="M10 11v6"/>
+      <path d="M14 11v6"/>
+    </svg>
+  `;
+  
+  btn.addEventListener("click", function(e){
+    e.stopPropagation();
+    el.remove();
+  });
+  
+  el.appendChild(btn);
+}
+
+function removeDeleteButtons(){
+  document.querySelectorAll(".delete-btn").forEach(b => b.remove());
+}
+
+// Attach to selection logic
+document.addEventListener("click", function(e){
+  const space = e.target.closest(".space");
+  const table = e.target.closest(".table");
+  
+  if(space){
+    addDeleteButton(space);
+  } else if(table){
+    addDeleteButton(table);
+  } else {
+    removeDeleteButtons();
+  }
+});
+
+
+/* --- v154: Robust Undo (1 level) without breaking events --- */
+let undoStack = [];
+let _snapshotArmed = false;
+
+function takeSnapshot(){
+  const chap = document.getElementById("chapiteau");
+  if(!chap) return;
+  undoStack.push(chap.innerHTML);
+  if(undoStack.length > 30) undoStack.shift();
+}
+
+function rebindAfterRestore(){
+  // Clear selection state if exists
+  try{ if(typeof clearSelection === "function") clearSelection(); }catch(e){}
+  try{ if(typeof clearTableSelection === "function") clearTableSelection(); }catch(e){}
+  // Reattach draggability
+  document.querySelectorAll("#chapiteau .table, #chapiteau .space").forEach(el=>{
+    if(typeof makeDraggable === "function") makeDraggable(el);
+  });
+  // Remove any leftover UI buttons
+  if(typeof removeDeleteButtons === "function") removeDeleteButtons();
+}
+
+function undoAction(){
+  if(undoStack.length === 0) return;
+  const chap = document.getElementById("chapiteau");
+  chap.innerHTML = undoStack.pop();
+  rebindAfterRestore();
+}
+
+// Arm snapshot once per user gesture (mouse down) then reset on mouseup
+document.addEventListener("mousedown", function(e){
+  if(_snapshotArmed) return;
+  // If user is about to manipulate something that can change state
+  if(e.target.closest(".table, .space") || 
+     (e.target.classList && (e.target.classList.contains("resize-handle") || e.target.classList.contains("rotate-handle"))) ||
+     e.target.closest(".delete-btn")){
+    takeSnapshot();
+    _snapshotArmed = true;
+  }
+}, true);
+
+document.addEventListener("mouseup", function(){
+  _snapshotArmed = false;
+}, true);
+
+// Keyboard delete/backspace snapshots
+document.addEventListener("keydown", function(e){
+  const isDelete = (e.key === "Delete" || e.key === "Backspace" || e.keyCode === 46 || e.keyCode === 8);
+  if(!isDelete) return;
+  const tag = e.target && e.target.tagName ? e.target.tagName.toLowerCase() : "";
+  if(tag === "input" || tag === "textarea" || tag === "select") return;
+  takeSnapshot();
+}, true);
+
+// Wrap creation functions without changing their internals
+(function(){
+  if(typeof addTable === "function"){
+    const _addTable = addTable;
+    window.addTable = function(){
+      takeSnapshot();
+      return _addTable.apply(this, arguments);
+    };
+  }
+  if(typeof addSpace === "function"){
+    const _addSpace = addSpace;
+    window.addSpace = function(){
+      takeSnapshot();
+      return _addSpace.apply(this, arguments);
+    };
+  }
+})();
 
 </script>
 </body>
