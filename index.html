@@ -606,13 +606,32 @@ function addTable() {
 
 
   
+
 function addSpace() {
-  const width = parseInt(prompt("Largeur de l'espace (en mètres) :", "2"), 10);
-  const height = parseInt(prompt("Hauteur de l'espace (en mètres) :", "1.5"), 10);
-  const label = prompt("Nom de l'espace :", "Espace");
+  document.getElementById("spaceModal").style.display = "flex";
+}
 
-  if (isNaN(width) || isNaN(height)) return;
+function closeSpaceModal() {
+  document.getElementById("spaceModal").style.display = "none";
+  document.getElementById("modalError").innerText = "";
+}
 
+function confirmSpaceCreation() {
+  let widthInput = document.getElementById("modalWidth").value.replace(",", ".");
+  let lengthInput = document.getElementById("modalLength").value.replace(",", ".");
+  let label = document.getElementById("modalLabel").value;
+
+  const width = parseFloat(widthInput);
+  const height = parseFloat(lengthInput);
+
+  if(isNaN(width) || isNaN(height) || width <= 0 || height <= 0) {
+    document.getElementById("modalError").innerText = "Dimensions invalides (ex: 1,50)";
+    return;
+  }
+
+  closeSpaceModal();
+
+  
   const space = document.createElement("div");
   space.className = "space";
   space.dataset.label = label;
@@ -637,7 +656,9 @@ function addSpace() {
   space.appendChild(text);
   makeDraggable(space);
   chapiteau.appendChild(space);
+
 }
+
 
 
   function makeDraggable(el) {
@@ -1251,6 +1272,79 @@ document.addEventListener("keydown", function(e){
   }
 })();
 
+
+/* --- v167: Rename tables & spaces (stable) --- */
+document.addEventListener("dblclick", function(e){
+
+  const element = e.target.closest(".table, .space");
+  if(!element) return;
+
+  const label = element.querySelector(".table-label");
+  if(!label) return;
+
+  e.stopPropagation();
+
+  const original = label.textContent;
+
+  const input = document.createElement("input");
+  input.type = "text";
+  input.value = original;
+
+  input.style.position = "absolute";
+  input.style.left = label.style.left || "50%";
+  input.style.top = label.style.top || "50%";
+  input.style.transform = label.style.transform || "translate(-50%, -50%)";
+  input.style.fontSize = label.style.fontSize || "14px";
+  input.style.textAlign = "center";
+  input.style.zIndex = "5000";
+
+  element.appendChild(input);
+  label.style.display = "none";
+
+  input.focus();
+  input.select();
+
+  function save(){
+    const val = input.value.trim();
+    if(val !== ""){
+      label.textContent = val;
+      if(element.classList.contains("space")) element.dataset.label = val;
+      if(element.classList.contains("table")) element.dataset.name = val;
+    }
+    cleanup();
+  }
+
+  function cleanup(){
+    input.remove();
+    label.style.display = "";
+  }
+
+  input.addEventListener("keydown", function(ev){
+    if(ev.key === "Enter") save();
+    if(ev.key === "Escape") cleanup();
+  });
+
+  input.addEventListener("blur", save);
+});
+
 </script>
+
+<div id="spaceModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);align-items:center;justify-content:center;z-index:1000;">
+  <div style="background:white;padding:20px;border-radius:10px;width:300px;font-family:Playfair Display,serif;">
+    <h3 style="margin-top:0;">Créer un espace</h3>
+    <label>Largeur (m)</label>
+    <input id="modalWidth" type="text" value="1,50" style="width:100%;margin-bottom:8px;">
+    <label>Longueur (m)</label>
+    <input id="modalLength" type="text" value="2,00" style="width:100%;margin-bottom:8px;">
+    <label>Nom</label>
+    <input id="modalLabel" type="text" value="Espace" style="width:100%;margin-bottom:12px;">
+    <div style="display:flex;justify-content:space-between;">
+      <button onclick="closeSpaceModal()">Annuler</button>
+      <button onclick="confirmSpaceCreation()">Créer</button>
+    </div>
+    <div id="modalError" style="color:red;font-size:13px;margin-top:8px;"></div>
+  </div>
+</div>
+
 </body>
 </html>
